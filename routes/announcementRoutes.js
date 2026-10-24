@@ -18,7 +18,8 @@ const upload = multer({ storage });
 // 1. Yangi e'lon qo'shish (POST)
 router.post("/create", upload.array("images", 10), async (req, res) => {
   try {
-    const { title, category, location } = req.body;
+    // req.body ichidan description ham olindi
+    const { title, category, location, description } = req.body;
 
     const imageUrls = req.files
       ? req.files.map((file) => `/uploads/${file.filename}`)
@@ -28,6 +29,7 @@ router.post("/create", upload.array("images", 10), async (req, res) => {
       title,
       category,
       location,
+      description, // Modelga saqlanmoqda
       images: imageUrls,
     });
 

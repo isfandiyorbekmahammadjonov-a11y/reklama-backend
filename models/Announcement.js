@@ -14,6 +14,10 @@ const announcementSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    description: {
+      type: String,
+      required: true, // Batafsil ma'lumot kiritilishi shart
+    },
     images: {
       type: [String],
       default: [],
