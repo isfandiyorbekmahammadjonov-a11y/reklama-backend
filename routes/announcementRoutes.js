@@ -1,35 +1,50 @@
 const express = require("express");
 const router = express.Router();
 const multer = require("multer");
-const path = require("path");
+const axios = require("axios");
+const FormData = require("form-data");
+const fs = require("fs");
 const Announcement = require("../models/Announcement");
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/");
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
-  },
-});
-
-const upload = multer({ storage });
+// Multer vaqtincha lokal papkaga saqlab turishi uchun (keyin ImgBB'ga yuboriladi)
+const upload = multer({ dest: "uploads/" });
 
 // 1. Yangi e'lon qo'shish (POST)
 router.post("/create", upload.array("images", 10), async (req, res) => {
   try {
-    // req.body ichidan description ham olindi
     const { title, category, location, description } = req.body;
+    const imageUrls = [];
 
-    const imageUrls = req.files
-      ? req.files.map((file) => `/uploads/${file.filename}`)
-      : [];
+    // Agar rasmlar yuklangan bo'lsa, ularni ImgBB'ga birma-bir yuboramiz
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        const formData = new FormData();
+        formData.append("image", fs.createReadStream(file.path));
+
+        // ImgBB APIga so'rov yuborish (IMGBB_API_KEY ni .env ga yozasiz)
+        const imgbbResponse = await axios.post(
+          `https://api.imgbb.com/1/upload?key=${process.env.IMGBB_API_KEY}`,
+          formData,
+          {
+            headers: {
+              ...formData.getHeaders(),
+            },
+          },
+        );
+
+        // ImgBB bergan doimiy rasm havolasini olamiz
+        imageUrls.push(imgbbResponse.data.data.url);
+
+        // Vaqtincha saqlangan lokal faylni o'chirib yuboramiz (serverni toza saqlash uchun)
+        fs.unlinkSync(file.path);
+      }
+    }
 
     const newAnnouncement = new Announcement({
       title,
       category,
       location,
-      description, // Modelga saqlanmoqda
+      description,
       images: imageUrls,
     });
 
@@ -40,6 +55,7 @@ router.post("/create", upload.array("images", 10), async (req, res) => {
       data: newAnnouncement,
     });
   } catch (error) {
+    console.error("Xatolik:", error.response?.data || error.message);
     res.status(500).json({
       message: "Serverda xatolik yuz berdi",
       error: error.message,
