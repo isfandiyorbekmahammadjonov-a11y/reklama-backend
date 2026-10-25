@@ -1,13 +1,11 @@
 const express = require("express");
 const router = express.Router();
 const multer = require("multer");
-const axios = require("axios");
-const FormData = require("form-data");
-const fs = require("fs");
 const Announcement = require("../models/Announcement");
 
-// Multer vaqtincha lokal papkaga saqlab turishi uchun (keyin ImgBB'ga yuboriladi)
-const upload = multer({ dest: "uploads/" });
+// Multer orqali rasmni vaqtincha xotiraga (memoryStorage) olamiz (diskka yozib o'tirmaymiz)
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
 // 1. Yangi e'lon qo'shish (POST)
 router.post("/create", upload.array("images", 10), async (req, res) => {
@@ -15,28 +13,29 @@ router.post("/create", upload.array("images", 10), async (req, res) => {
     const { title, category, location, description } = req.body;
     const imageUrls = [];
 
-    // Agar rasmlar yuklangan bo'lsa, ularni ImgBB'ga birma-bir yuboramiz
+    // Agar rasmlar yuklangan bo'lsa
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
-        const formData = new FormData();
-        formData.append("image", fs.createReadStream(file.path));
+        // Faylni Base64 formatga o'tkazamiz
+        const base64Image = file.buffer.toString("base64");
 
-        // ImgBB APIga so'rov yuborish (IMGBB_API_KEY ni .env ga yozasiz)
-        const imgbbResponse = await axios.post(
-          `https://api.imgbb.com/1/upload?key=${process.env.IMGBB_API_KEY}`,
-          formData,
-          {
-            headers: {
-              ...formData.getHeaders(),
-            },
-          },
-        );
+        const formData = new URLSearchParams();
+        formData.append("key", process.env.IMGBB_API_KEY);
+        formData.append("image", base64Image);
 
-        // ImgBB bergan doimiy rasm havolasini olamiz
-        imageUrls.push(imgbbResponse.data.data.url);
+        // ImgBB API ga fetch orqali yuboramiz
+        const imgbbRes = await fetch("https://api.imgbb.com/1/upload", {
+          method: "POST",
+          body: formData,
+        });
 
-        // Vaqtincha saqlangan lokal faylni o'chirib yuboramiz (serverni toza saqlash uchun)
-        fs.unlinkSync(file.path);
+        const imgbbData = await imgbbRes.json();
+
+        if (imgbbData.success) {
+          imageUrls.push(imgbbData.data.url);
+        } else {
+          console.error("ImgBB xatosi:", imgbbData);
+        }
       }
     }
 
@@ -55,7 +54,7 @@ router.post("/create", upload.array("images", 10), async (req, res) => {
       data: newAnnouncement,
     });
   } catch (error) {
-    console.error("Xatolik:", error.response?.data || error.message);
+    console.error("Server xatosi:", error.message);
     res.status(500).json({
       message: "Serverda xatolik yuz berdi",
       error: error.message,
