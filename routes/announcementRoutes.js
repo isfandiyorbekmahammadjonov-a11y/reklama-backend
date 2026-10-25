@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require("multer");
 const Announcement = require("../models/Announcement");
 
-// Multer orqali rasmni vaqtincha xotiraga (memoryStorage) olamiz (diskka yozib o'tirmaymiz)
+// Multer orqali rasmni vaqtincha xotirada saqlaymiz
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
@@ -16,17 +16,18 @@ router.post("/create", upload.array("images", 10), async (req, res) => {
     // Agar rasmlar yuklangan bo'lsa
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
-        // Faylni Base64 formatga o'tkazamiz
-        const base64Image = file.buffer.toString("base64");
-
-        const formData = new URLSearchParams();
+        // Base64 va URLSearchParams o'rniga FormData va Blob ishlatamiz
+        const formData = new FormData();
         formData.append("key", process.env.IMGBB_API_KEY);
-        formData.append("image", base64Image);
+
+        // Buffer'ni Blob ko'rinishiga o'tkazib, fayl sifatida qo'shamiz
+        const blob = new Blob([file.buffer], { type: file.mimetype });
+        formData.append("image", blob, file.originalname);
 
         // ImgBB API ga fetch orqali yuboramiz
         const imgbbRes = await fetch("https://api.imgbb.com/1/upload", {
           method: "POST",
-          body: formData,
+          body: formData, // FormData avtomatik ravishda multipart/form-data qiladi
         });
 
         const imgbbData = await imgbbRes.json();
