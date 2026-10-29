@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require("multer");
 const Announcement = require("../models/Announcement");
 
-// Multer orqali rasmni vaqtincha xotirada saqlaymiz
+// Multer orqali rasmni xotirada (memoryStorage) tutib olamiz
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
@@ -13,33 +13,37 @@ router.post("/create", upload.array("images", 10), async (req, res) => {
     const { title, category, location, description } = req.body;
     const imageUrls = [];
 
-    // Agar rasmlar yuklangan bo'lsa
+    // Agar rasmlar req.files orqali kelgan bo'lsa
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
-        // Base64 va URLSearchParams o'rniga FormData va Blob ishlatamiz
-        const formData = new FormData();
-        formData.append("key", process.env.IMGBB_API_KEY);
+        // Buffer'ni Base64 string shakliga o'tkazamiz
+        const base64Image = file.buffer.toString("base64");
 
-        // Buffer'ni Blob ko'rinishiga o'tkazib, fayl sifatida qo'shamiz
-        const blob = new Blob([file.buffer], { type: file.mimetype });
-        formData.append("image", blob, file.originalname);
+        // ImgBB API URLSearchParams qabul qiladi
+        const params = new URLSearchParams();
+        params.append("key", process.env.IMGBB_API_KEY);
+        params.append("image", base64Image);
 
-        // ImgBB API ga fetch orqali yuboramiz
+        // ImgBB API ga POST so'rov yuboramiz
         const imgbbRes = await fetch("https://api.imgbb.com/1/upload", {
           method: "POST",
-          body: formData, // FormData avtomatik ravishda multipart/form-data qiladi
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: params.toString(),
         });
 
         const imgbbData = await imgbbRes.json();
 
-        if (imgbbData.success) {
+        if (imgbbData && imgbbData.success) {
           imageUrls.push(imgbbData.data.url);
         } else {
-          console.error("ImgBB xatosi:", imgbbData);
+          console.error("ImgBB yuklash xatosi:", imgbbData);
         }
       }
     }
 
+    // Yaratilgan e'lonni bazaga saqlash
     const newAnnouncement = new Announcement({
       title,
       category,
